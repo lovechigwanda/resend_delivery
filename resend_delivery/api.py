@@ -18,14 +18,6 @@ from frappe import _
 # Reject events whose timestamp is outside this window (replay protection).
 TIMESTAMP_TOLERANCE_SECONDS = 5 * 60
 
-# Resend event type -> Email Queue status
-_QUEUE_STATUS = {
-	"email.sent": "Sent",
-	"email.delivered": "Sent",
-	"email.bounced": "Error",
-	"email.delivery_delayed": "Sending",
-}
-
 # Resend event type -> Communication.delivery_status
 _COMM_STATUS = {
 	"email.sent": "Sent",
@@ -159,22 +151,28 @@ def _process_event(event):
 	if not email_id:
 		return
 
-	queue_name = frappe.db.get_value("Email Queue", {"resend_email_id": email_id}, "name")
-	if not queue_name:
+	row = frappe.db.get_value(
+		"Email Queue Recipient",
+		{"resend_email_id": email_id},
+		["name", "parent"],
+		as_dict=True,
+	)
+	if not row:
 		return
 
-	updates = {}
-	status = _QUEUE_STATUS.get(event_type)
-	if status:
-		updates["status"] = status
+	# A hard bounce is a delivery failure: record it on the recipient row and
+	# flag the parent queue as Error for visibility.
 	if event_type == "email.bounced":
-		updates["error"] = _bounce_text(data)
-	if updates:
-		frappe.db.set_value("Email Queue", queue_name, updates)
+		frappe.db.set_value(
+			"Email Queue Recipient", row.name, "error", _bounce_text(data), update_modified=False
+		)
+		frappe.db.set_value("Email Queue", row.parent, "status", "Error")
 
+	# Reflect the delivery lifecycle on the linked Communication, which has a
+	# rich delivery_status vocabulary (Opened / Clicked / Bounced / ...).
 	comm_status = _COMM_STATUS.get(event_type)
 	if comm_status:
-		communication = frappe.db.get_value("Email Queue", queue_name, "communication")
+		communication = frappe.db.get_value("Email Queue", row.parent, "communication")
 		if communication:
 			frappe.db.set_value(
 				"Communication", communication, "delivery_status", comm_status, update_modified=False

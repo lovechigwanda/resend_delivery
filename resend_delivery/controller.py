@@ -36,7 +36,7 @@ def send(email_queue, sender, recipient, message):
 	payload = _build_payload(account, recipient, mime)
 	resend_id = send_payload(account, payload)
 
-	_record_result(email_queue, resend_id)
+	_record_result(email_queue, recipient, resend_id)
 
 
 def send_via_resend(account, to, subject, html=None, text=None):
@@ -243,24 +243,43 @@ def _format_from(account):
 # ---------------------------------------------------------------------------
 
 
-def _record_result(email_queue, resend_id):
-	"""Store the Resend id and move the row to ``Sending``.
+def _record_result(email_queue, recipient, resend_id):
+	"""Store the Resend id on the recipient row and move the queue to ``Sending``.
 
-	Final delivery is confirmed asynchronously by the webhook; until then the
-	message is in flight, so ``Sending`` (not ``Sent``) is the correct status.
+	The hook fires once per recipient, each producing a distinct Resend id, so
+	the id is stored on the matching Email Queue Recipient (child) row. Final
+	delivery is confirmed asynchronously by the webhook; until then the message
+	is in flight, so ``Sending`` (not ``Sent``) is the correct status.
+
+	A missing custom field (install/migrate not yet run) must never break the
+	send itself — it is logged and swallowed.
 	"""
 	if resend_id:
-		try:
-			email_queue.db_set("resend_email_id", resend_id, commit=False)
-		except Exception:
-			# Custom field missing (install/migrate not run yet) — non-fatal.
-			frappe.log_error(title="resend_delivery: could not store resend_email_id")
+		row = _find_recipient_row(email_queue, recipient)
+		if row:
+			try:
+				row.db_set("resend_email_id", resend_id, commit=False)
+			except Exception:
+				frappe.log_error(title="resend_delivery: could not store resend_email_id")
 
 	try:
 		email_queue.db_set("status", "Sending", commit=True)
 	except Exception:
 		frappe.db.set_value("Email Queue", email_queue.name, "status", "Sending")
 		frappe.db.commit()
+
+
+def _find_recipient_row(email_queue, recipient):
+	"""Return the child recipient row for ``recipient`` that is still pending."""
+	rows = email_queue.recipients or []
+	for row in rows:
+		if row.recipient == recipient and not row.is_mail_sent():
+			return row
+	# Fall back to any row with the address (e.g. already flipped to Sent).
+	for row in rows:
+		if row.recipient == recipient:
+			return row
+	return None
 
 
 def _error_text(resp):

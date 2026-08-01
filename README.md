@@ -69,6 +69,26 @@ bench --site your-site.local install-app resend_delivery
 That's it — once at least one enabled Resend Account exists, all outgoing
 mail from Frappe is sent through Resend.
 
+## The default outgoing Email Account requirement
+
+Frappe's mail pipeline refuses to enqueue any outgoing email unless it can
+resolve a **default outgoing Email Account** — and that check happens *before*
+this app's `override_email_send` hook runs, so the app can't remove it. The
+account does **not** need to be a working SMTP server, though: when the
+override handles a send, Frappe never opens an SMTP connection, so the account
+is just a shell Frappe insists on while Resend does the real delivery.
+
+**You don't have to set this up manually.** When you create/enable your first
+**Resend Account**, this app automatically provisions a placeholder default
+outgoing Email Account named `Resend Delivery` (SMTP server `localhost`, which
+Frappe never contacts). If you already have your own default outgoing Email
+Account, the app leaves it untouched.
+
+If you'd rather configure it yourself, create an Email Account with **Enable
+Outgoing** + **Default Outgoing** and set the **SMTP Server** to `localhost`
+(Frappe skips its connection test for `localhost`, so it saves without a real
+server).
+
 ## Notes / limitations
 
 - Resend's API takes an explicit `to` per request; since Frappe already
