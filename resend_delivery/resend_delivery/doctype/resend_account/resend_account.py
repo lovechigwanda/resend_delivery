@@ -17,6 +17,20 @@ class ResendAccount(Document):
 		self._enforce_single_default()
 		self._set_webhook_url()
 
+	def on_update(self):
+		# Make sure Frappe has a default outgoing Email Account so its mail
+		# pipeline accepts outgoing email; Resend does the real sending. A
+		# provisioning hiccup must never block saving the account itself.
+		if self.enabled:
+			try:
+				from resend_delivery.install import ensure_outgoing_email_account
+
+				ensure_outgoing_email_account(self.sender_email)
+			except Exception:
+				frappe.log_error(
+					title="resend_delivery: could not provision outgoing Email Account"
+				)
+
 	def _enforce_single_default(self):
 		"""At most one account may be marked as the default."""
 		if not self.use_as_default:
