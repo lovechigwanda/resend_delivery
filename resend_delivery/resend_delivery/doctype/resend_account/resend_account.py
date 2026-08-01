@@ -1,7 +1,9 @@
+from urllib.parse import quote
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_url, validate_email_address
+from frappe.utils import escape_html, get_url, validate_email_address
 
 
 class ResendAccount(Document):
@@ -34,7 +36,7 @@ class ResendAccount(Document):
 		"""Absolute URL a Resend webhook should target for this account."""
 		self.webhook_url = "{base}/api/method/resend_delivery.api.resend_webhook?account={name}".format(
 			base=get_url(),
-			name=frappe.utils.quote(self.name or ""),
+			name=quote(self.name or ""),
 		)
 
 	@frappe.whitelist()
@@ -55,7 +57,7 @@ class ResendAccount(Document):
 		html = _(
 			"<p>This is a test email from <b>{0}</b> sent through Resend.</p>"
 			"<p>If you are reading this, the API key and sending domain are working.</p>"
-		).format(frappe.utils.escape_html(self.account_name))
+		).format(escape_html(self.account_name))
 
 		resend_id = send_via_resend(
 			self,
