@@ -1,9 +1,10 @@
 [project]
 name = "resend_delivery"
 authors = [
-    { name = "Your Organisation", email = "you@example.com" },
+    { name = "lovechigwanda", email = "lschigwanda@gmail.com" },
 ]
 description = "Send outgoing Frappe emails through Resend (resend.com) using per-account API keys."
+license = { file = "license.txt" }
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
